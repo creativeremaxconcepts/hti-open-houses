@@ -84,8 +84,8 @@ function parseRows(json) {
       var row = {};
       cols.forEach(function(col, i) {
         var cell = r.c[i];
-        if (!cell || cell.v === null || cell.v === undefined) {
-          row[col] = '';
+        if (!cell || (cell.v === null || cell.v === undefined)) {
+          row[col] = (cell && cell.f) ? cell.f : '';
         } else if (typeof cell.v === 'boolean') {
           row[col] = cell.v ? 'TRUE' : 'FALSE';
         } else if (typeof cell.v === 'string' && cell.v.indexOf('Date(') === 0) {
@@ -112,7 +112,8 @@ function buildCard(row) {
   var sqft      = row['Square Footage'] || '';
   var d         = (row['Open House Date'] || '').trim();
   var t         = (row['Open House Time'] || '').trim();
-  var ribbon    = d.toLowerCase() === 'daily' ? 'Daily • ' + t : (d ? d + ' • ' + t : t);
+  var dl = d.toLowerCase();
+  var ribbon    = dl === 'daily' ? 'Daily • ' + t : dl === 'weekly' ? 'Weekly • ' + t : (d ? d + ' • ' + t : t);
 
   return '<a href="' + link + '" class="openhouse-card">' +
     '<div class="image-wrap">' +
@@ -130,13 +131,29 @@ function buildCard(row) {
   '</a>';
 }
 
+function parseOpenHouseDate(str) {
+  var parts = str.split('/');
+  if (parts.length !== 3) return null;
+  var m = parseInt(parts[0], 10) - 1;
+  var d = parseInt(parts[1], 10);
+  var y = parseInt(parts[2], 10);
+  if (y < 100) y += 2000;
+  return new Date(y, m, d);
+}
+
 function renderPage(json) {
   var grid = document.getElementById('hti-grid');
   if (!grid) return;
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
   var rows = parseRows(json);
   var active = rows
     .filter(function(r) {
-      return (r['Active Open House'] || '').toUpperCase() === 'TRUE';
+      if ((r['Active Open House'] || '').toUpperCase() !== 'TRUE') return false;
+      var d = (r['Open House Date'] || '').trim().toLowerCase();
+      if (!d || d === 'daily' || d === 'weekly') return true;
+      var ohDate = parseOpenHouseDate(r['Open House Date'].trim());
+      return ohDate !== null && ohDate >= today;
     })
     .sort(function(a, b) {
       return (parseInt(a['Sort Order '] || 999) || 999) - (parseInt(b['Sort Order '] || 999) || 999);
